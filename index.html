@@ -341,9 +341,13 @@ function renderInsights(data,curM){
 (function(){
   if(typeof THREE==='undefined'){console.warn('three.js not loaded');return;}
   const dark=matchMedia('(prefers-color-scheme:dark)').matches;
+  // auto-simplify on phones / touch devices, and honour reduced-motion
+  const lite=innerWidth<768||matchMedia('(pointer:coarse)').matches||(navigator.hardwareConcurrency||8)<=4;
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const M=reduce?0:1; // global motion multiplier
   const cvs=document.createElement('canvas');cvs.id='bg3d';document.body.prepend(cvs);
-  const renderer=new THREE.WebGLRenderer({canvas:cvs,antialias:true,alpha:true,powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2)); // crisp on hi-DPI
+  const renderer=new THREE.WebGLRenderer({canvas:cvs,antialias:!lite,alpha:true,powerPreference:lite?'low-power':'high-performance'});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,lite?1.5:2)); // crisp on hi-DPI, lighter on mobile
   const scene=new THREE.Scene();
   scene.fog=new THREE.FogExp2(dark?0x0a0713:0xece6fb,0.055);
   const cam=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,100);
@@ -359,7 +363,7 @@ function renderInsights(data,curM){
   const coinMat=new THREE.MeshStandardMaterial({color:0xf6c945,metalness:1,roughness:0.28,emissive:0x3a2900,emissiveIntensity:0.35});
   const cardGeo=new THREE.BoxGeometry(1.15,1.55,0.05);
   const objs=[];
-  for(let i=0;i<20;i++){
+  for(let i=0;i<(lite?8:20);i++){
     const coin=Math.random()<0.5;
     const mat=coin?coinMat:new THREE.MeshStandardMaterial({
       color:coin?0xf6c945:(Math.random()<0.5?0x8b5cf6:0xec4899),
@@ -371,14 +375,14 @@ function renderInsights(data,curM){
     grp.add(m);objs.push(m);
   }
   // particle dust
-  const N=420,pg=new THREE.BufferGeometry(),pp=new Float32Array(N*3);
+  const N=lite?120:420,pg=new THREE.BufferGeometry(),pp=new Float32Array(N*3);
   for(let i=0;i<N*3;i++)pp[i]=(Math.random()-0.5)*34;
   pg.setAttribute('position',new THREE.BufferAttribute(pp,3));
   const pts=new THREE.Points(pg,new THREE.PointsMaterial({color:0xa855f7,size:0.055,transparent:true,opacity:dark?0.6:0.4}));
   scene.add(pts);
 
   let mx=0,my=0;
-  addEventListener('pointermove',e=>{mx=e.clientX/innerWidth-0.5;my=e.clientY/innerHeight-0.5;},{passive:true});
+  if(!lite)addEventListener('pointermove',e=>{mx=e.clientX/innerWidth-0.5;my=e.clientY/innerHeight-0.5;},{passive:true});
   function size(){cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);}
   addEventListener('resize',size);size();
 
@@ -387,9 +391,9 @@ function renderInsights(data,curM){
   function loop(){
     if(!run)return;requestAnimationFrame(loop);
     const t=clock.getElapsedTime();
-    for(const m of objs){m.rotation.x+=0.003*m.userData.sp;m.rotation.y+=0.004*m.userData.sp;
-      m.position.y+=Math.sin(t*m.userData.sp+m.userData.fl)*0.0022*m.userData.amp;}
-    grp.rotation.y=t*0.03;pts.rotation.y=t*0.02;
+    for(const m of objs){m.rotation.x+=0.003*m.userData.sp*M;m.rotation.y+=0.004*m.userData.sp*M;
+      m.position.y+=Math.sin(t*m.userData.sp+m.userData.fl)*0.0022*m.userData.amp*M;}
+    grp.rotation.y=t*0.03*M;pts.rotation.y=t*0.02*M;
     cam.position.x+=(mx*2.2-cam.position.x)*0.045;
     cam.position.y+=(-my*1.6-cam.position.y)*0.045;
     cam.lookAt(0,0,0);
@@ -397,9 +401,9 @@ function renderInsights(data,curM){
   }
   loop();
 
-  // glass panels tilt in real 3D toward the cursor
+  // glass panels tilt in real 3D toward the cursor (desktop only)
   let raf;
-  addEventListener('pointermove',e=>{
+  if(!lite)addEventListener('pointermove',e=>{
     if(raf)return;raf=requestAnimationFrame(()=>{raf=0;
       document.querySelectorAll('.card').forEach(c=>{
         const r=c.getBoundingClientRect();
